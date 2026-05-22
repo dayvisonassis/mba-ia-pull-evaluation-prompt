@@ -334,3 +334,208 @@ python src/evaluate.py
 - **Não altere os datasets de avaliação** - apenas os prompts em `prompts/bug_to_user_story_v2.yml`
 - **Itere, itere, itere** - é normal precisar de 3-5 iterações para atingir 0.9 em todas as métricas
 - **Documente seu processo** - a jornada de otimização é tão importante quanto o resultado final
+
+---
+
+# 📄 Documentação da Solução
+
+> As seções abaixo documentam a resolução do desafio: técnicas aplicadas na refatoração do
+> prompt, resultados das avaliações e instruções de execução.
+
+## A) Técnicas Aplicadas (Fase 2)
+
+A refatoração do prompt `bug_to_user_story_v1` → `bug_to_user_story_v2` aplicou **três técnicas**
+de Prompt Engineering (o desafio exige Few-shot + ao menos uma adicional). Todas estão
+declaradas no campo `techniques_applied` do arquivo
+[`prompts/bug_to_user_story_v2.yml`](prompts/bug_to_user_story_v2.yml).
+
+### 1. Few-shot Learning (obrigatória)
+
+**O que é:** fornecer ao modelo exemplos completos de entrada (relato de bug) e saída
+(User Story) para que ele aprenda o formato esperado por demonstração.
+
+**Por que escolhi:** a métrica **F1-Score** (e seu componente *recall*) compara a resposta
+gerada com a *ground truth* do dataset. Os exemplos de referência seguem um formato muito
+específico (frase "Como um... eu quero... para que...", critérios em Gherkin, seções de
+contexto técnico, e — nos casos complexos — blocos delimitados por `=== ... ===`). Sem exemplos,
+o modelo improvisa formatos diferentes e o *recall* despenca. Com Few-shot, ele reproduz o
+formato esperado, elevando F1, Clarity e Precision simultaneamente.
+
+**Como apliquei:** incluí **3 exemplos** no `system_prompt`, um para cada nível de complexidade
+do dataset (5 simples, 7 médios, 3 complexos):
+- **Simples** (bug de uma frase) → história + ~5 critérios Gherkin.
+- **Médio** (com logs/endpoints) → história + Gherkin + seção `Contexto Técnico:`.
+- **Complexo** (múltiplos problemas + impacto) → seções `=== USER STORY PRINCIPAL ===`,
+  `=== CRITÉRIOS DE ACEITAÇÃO ===` (grupos A/B/C/D), `=== CRITÉRIOS TÉCNICOS ===`,
+  `=== CONTEXTO DO BUG ===` e `=== TASKS TÉCNICAS SUGERIDAS ===`.
+
+### 2. Chain of Thought (CoT)
+
+**O que é:** instruir o modelo a "pensar passo a passo" antes de responder.
+
+**Por que escolhi:** transformar um bug em User Story exige raciocínio — identificar a persona,
+a ação desejada, o valor de negócio e derivar critérios de aceitação que cubram todos os
+cenários. O CoT melhora a qualidade e a completude da resposta (impacta F1 e Precision).
+
+**Como apliquei:** o `system_prompt` traz a seção *"Como raciocinar"* com 5 passos
+(quem → o quê → para quê → complexidade → critérios). **Importante:** instruí o modelo a
+**raciocinar internamente e devolver APENAS o resultado final** — isso evita que o raciocínio
+"vaze" na saída, o que prejudicaria a métrica **Clarity** e o *precision* do F1.
+
+### 3. Role Prompting
+
+**O que é:** atribuir uma persona/papel claro ao modelo.
+
+**Por que escolhi:** definir a persona calibra o tom, o vocabulário e o nível de detalhe da
+resposta para o domínio de produto/ágil, melhorando a relevância (Precision) e a clareza.
+
+**Como apliquei:** o prompt começa com
+*"Você é um Product Manager Sênior, especialista em metodologias ágeis e na escrita de
+User Stories de alta qualidade."*, seguido de regras explícitas de comportamento, formato e
+tratamento de *edge cases* (relato vago, vazio ou com múltiplos problemas).
+
+### Resumo do uso de System vs. User Prompt
+
+| Mensagem | Conteúdo | Variável |
+|----------|----------|----------|
+| **System** | Persona, regras, CoT, formato por complexidade, edge cases e os 3 exemplos Few-shot (estático) | — |
+| **User** | Apenas o relato do bug | `{bug_report}` |
+
+Manter o `system_prompt` **estático e sem variáveis** garante que a única variável de template
+seja `{bug_report}` — exatamente o que o `evaluate.py` injeta a partir do dataset.
+
+---
+
+## B) Resultados Finais
+
+### Tabela comparativa: v1 (ruim) vs v2 (otimizado)
+
+| Métrica | v1 (baseline) | v2 (otimizado) | Meta |
+|---------|:-------------:|:--------------:|:----:|
+| Helpfulness | _(baixo)_ | _(a preencher após avaliação)_ | ≥ 0.90 |
+| Correctness | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
+| F1-Score | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
+| Clarity | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
+| Precision | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
+
+> ℹ️ Os valores de v2 serão preenchidos após a execução de `python src/evaluate.py` (ver
+> seção *Como Executar*). A meta de aprovação é **todas as 5 métricas ≥ 0.90**.
+
+### Evidências no LangSmith
+
+- **Link público do prompt:** _(a preencher com `https://smith.langchain.com/hub/<seu-handle>/bug_to_user_story_v2`)_
+- **Dashboard de avaliação:** _(a preencher com o link do projeto `prompt-optimization-challenge`)_
+- **Screenshots:** adicione em `screenshots/` as capturas mostrando as 5 métricas ≥ 0.9, o
+  dataset com 15 exemplos e o tracing detalhado de pelo menos 3 exemplos.
+
+### Diferenças-chave entre v1 e v2
+
+| Aspecto | v1 | v2 |
+|---------|----|----|
+| Persona | Nenhuma ("assistente" genérico) | Product Manager Sênior (Role Prompting) |
+| Exemplos | Nenhum | 3 exemplos Few-shot (simples/médio/complexo) |
+| Raciocínio | Nenhum | Chain of Thought interno (5 passos) |
+| Formato | Vago ("crie uma user story") | Formato canônico + Gherkin + seções por complexidade |
+| Edge cases | Não tratados | Relato vago/vazio/múltiplos problemas tratados |
+| Variável `{bug_report}` | Duplicada em system + user (bug) | Apenas no user prompt |
+
+---
+
+## C) Como Executar
+
+### Pré-requisitos
+
+- Python 3.9+ (testado em 3.11)
+- Conta no [LangSmith](https://smith.langchain.com) com **API Key** e um **Hub handle** público
+- API Key de um provider de LLM:
+  - **Google Gemini** (gratuito): https://aistudio.google.com/app/apikey — usado nesta solução
+  - ou **OpenAI**: https://platform.openai.com/api-keys
+
+### 1. Ambiente virtual e dependências
+
+```bash
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# Linux / macOS
+source venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+### 2. Configurar variáveis de ambiente
+
+Copie `.env.example` para `.env` e preencha:
+
+```bash
+cp .env.example .env   # Windows: copy .env.example .env
+```
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=<sua-chave-langsmith>
+LANGSMITH_PROJECT=prompt-optimization-challenge
+USERNAME_LANGSMITH_HUB=<seu-handle>      # preencher após o 1º push público
+GOOGLE_API_KEY=<sua-chave-google>
+LLM_PROVIDER=google
+LLM_MODEL=gemini-2.5-flash
+EVAL_MODEL=gemini-2.5-flash
+```
+
+> 💡 **Windows / acentuação no terminal:** os scripts imprimem emojis e acentos. Se aparecer
+> `UnicodeEncodeError`, rode com saída em UTF-8:
+> ```powershell
+> $env:PYTHONUTF8 = "1"; $env:PYTHONIOENCODING = "utf-8"
+> ```
+
+### 3. Pull do prompt inicial (v1)
+
+```bash
+python src/pull_prompts.py
+```
+Faz pull de `leonanluppi/bug_to_user_story_v1` do Hub e salva em
+`prompts/bug_to_user_story_v1.yml`.
+
+### 4. (Já incluso) Otimizar o prompt
+
+O prompt otimizado já está em [`prompts/bug_to_user_story_v2.yml`](prompts/bug_to_user_story_v2.yml).
+Edite-o para iterar.
+
+### 5. Push do prompt otimizado (v2)
+
+```bash
+python src/push_prompts.py
+```
+Publica `bug_to_user_story_v2` no seu Hub. Por padrão tenta publicar como **público**; se a
+conta ainda não tiver um *Hub handle*, publica como **privado** e instrui você a torná-lo
+público pela interface (isso cria o handle). Você pode forçar privado com
+`PROMPT_PUBLIC=false`. Após o push, copie seu handle da URL e preencha
+`USERNAME_LANGSMITH_HUB` no `.env`.
+
+### 6. Avaliar
+
+```bash
+python src/evaluate.py
+```
+Cria/atualiza o dataset de 15 exemplos, puxa o `v2` do Hub, executa contra o dataset, calcula as
+5 métricas e publica no dashboard do LangSmith. Repita os passos 4–6 até **todas ≥ 0.9**.
+
+### 7. Testes de validação (estáticos, sem rede)
+
+```bash
+pytest tests/test_prompts.py -v
+```
+
+---
+
+## Notas de Implementação
+
+- **Arquivos implementados:** `src/pull_prompts.py`, `src/push_prompts.py`,
+  `prompts/bug_to_user_story_v2.yml`, `tests/test_prompts.py`.
+- **Não alterados (já vinham prontos):** `src/evaluate.py`, `src/metrics.py`, `src/utils.py`,
+  `datasets/bug_to_user_story.jsonl`.
+- **Provider:** Google Gemini (`gemini-2.5-flash`) para responder e avaliar.
+- **Contrato de avaliação:** o `evaluate.py` faz `hub.pull("{USERNAME_LANGSMITH_HUB}/bug_to_user_story_v2")`
+  esperando um `ChatPromptTemplate` cuja única variável seja `{bug_report}`. O `push_prompts.py`
+  monta esse template a partir do YAML e valida essa restrição antes de publicar.
