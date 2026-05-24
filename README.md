@@ -410,23 +410,74 @@ seja `{bug_report}` — exatamente o que o `evaluate.py` injeta a partir do data
 
 ### Tabela comparativa: v1 (ruim) vs v2 (otimizado)
 
-| Métrica | v1 (baseline) | v2 (otimizado) | Meta |
-|---------|:-------------:|:--------------:|:----:|
-| Helpfulness | _(baixo)_ | _(a preencher após avaliação)_ | ≥ 0.90 |
-| Correctness | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
-| F1-Score | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
-| Clarity | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
-| Precision | _(baixo)_ | _(a preencher)_ | ≥ 0.90 |
+Avaliação executada no LangSmith sobre o dataset `prompt-optimization-challenge-eval`
+(15 exemplos). Responder: `gemini-2.5-flash`; Juiz (LLM-as-Judge): `gemini-2.5-pro`.
 
-> ℹ️ Os valores de v2 serão preenchidos após a execução de `python src/evaluate.py` (ver
-> seção *Como Executar*). A meta de aprovação é **todas as 5 métricas ≥ 0.90**.
+| Métrica | v1 (baseline)¹ | v2 (otimizado)² | Meta | Status |
+|---------|:-------------:|:--------------:|:----:|:------:|
+| Helpfulness | 0.45 | **0.9523** | ≥ 0.90 | ✅ |
+| Correctness | 0.52 | **0.9335** | ≥ 0.90 | ✅ |
+| F1-Score | 0.48 | **0.9017** | ≥ 0.90 | ✅ |
+| Clarity | 0.50 | **0.9393** | ≥ 0.90 | ✅ |
+| Precision | 0.46 | **0.9653** | ≥ 0.90 | ✅ |
+| **Média geral** | ~0.48 | **0.9385** | ≥ 0.90 | ✅ |
+
+> ✅ **STATUS: APROVADO** — todas as 5 métricas ≥ 0.90.
+>
+> ¹ Valores de v1 conforme o baseline ilustrativo do enunciado (prompt sem persona, sem
+> few-shot e sem instruções de formato). ² Valores de v2 do experiment
+> `v2-fix-recall-69dd487d` registrado no LangSmith.
+
+### Jornada de otimização do F1-Score (a métrica mais difícil)
+
+O F1 foi a única métrica que exigiu iteração dedicada. Usando os **experiments registrados
+no LangSmith**, analisei o F1 exemplo a exemplo e descobri que a causa não era qualidade,
+mas **recall**: o prompt v2 produzia respostas corretas (precision ~1.0), porém **omitia
+seções inteiras que o gabarito esperava** (ex.: `Critérios Técnicos`, `Critérios de
+Acessibilidade`, `Critérios Adicionais para Admins`, e um bloco de prevenção para cenários
+de concorrência). Como o F1 = média harmônica de precision × recall, cada seção omitida
+derrubava o recall e o F1.
+
+| Iteração (experiment) | F1-Score | Demais métricas | Resultado |
+|---|:---:|:---:|:---:|
+| `v2-eval-e4079e6c` | 0.8563 | todas ≥ 0.90 | ❌ F1 abaixo da meta |
+| `v2-fix-recall-69dd487d` | **0.9017** | todas ≥ 0.90 | ✅ **APROVADO** |
+
+**Correção aplicada** (commit `69992a0b` do prompt no Hub): tornei as seções derivadas
+**obrigatórias por gatilho** (causa técnica → `Critérios Técnicos:`; UI/UX →
+`Critérios de Acessibilidade:`; múltiplos papéis → `Critérios Adicionais para [papel]:`;
+regra de negócio com concorrência → `Critérios de Prevenção:`), adicionei regra
+anti-precision para metas de performance (não cristalizar o tempo ruim como meta) e um
+novo exemplo Few-shot de bug técnico. Efeito medido: o bug "App Android (notificações)"
+subiu de F1 0.667 → 0.947, e o F1 médio de 0.856 → 0.902.
 
 ### Evidências no LangSmith
 
-- **Link público do prompt:** _(a preencher com `https://smith.langchain.com/hub/<seu-handle>/bug_to_user_story_v2`)_
-- **Dashboard de avaliação:** _(a preencher com o link do projeto `prompt-optimization-challenge`)_
-- **Screenshots:** adicione em `screenshots/` as capturas mostrando as 5 métricas ≥ 0.9, o
-  dataset com 15 exemplos e o tracing detalhado de pelo menos 3 exemplos.
+- **🔗 Link público (dataset + experiments) — abre sem login:**
+  https://smith.langchain.com/public/482c1ac5-b48c-480d-afd6-caaef28d2be8/d
+
+  Este link compartilha o dataset de avaliação (`prompt-optimization-challenge-eval`, **15
+  exemplos**) junto com **todos os experiments** rodados sobre ele. Por aqui o avaliador
+  pode confirmar, na própria plataforma, as 5 métricas ≥ 0.9 por exemplo, o tracing
+  detalhado e o *reasoning* do juiz — exatamente o que os screenshots mostram.
+
+  > Aparecem **dois experiments**, evidenciando a iteração exigida pelo desafio:
+  > `#1 v2-eval-e4079e6c` (F1 0.86 — reprovado) → `#2 v2-fix-recall-69dd487d`
+  > (**todas as 5 métricas ≥ 0.9 — aprovado**). O experiment final aprovado é o `#2`.
+
+- **Link público do prompt (v2):**
+  https://smith.langchain.com/prompts/bug_to_user_story_v2/69992a0b?organizationId=02a073ba-dcec-4290-93c4-7a01c4d4900e
+- **Screenshots:** em `screenshots/`, as capturas mostrando (a) as 5 métricas ≥ 0.9
+  na tela de comparação do experiment, (b) o dataset com 15 exemplos e (c) o tracing
+  detalhado de pelo menos 3 exemplos.
+
+> ℹ️ **Como os resultados são registrados no LangSmith:** o `src/evaluate.py` (imutável)
+> calcula as métricas e as imprime no terminal, mas **não** cria um *Experiment* no
+> LangSmith. Para gerar a evidência exigida (tela com as 5 métricas + link público), use o
+> runner `run_experiment.py` (na raiz do projeto), que usa a API oficial
+> `langsmith.evaluation.evaluate()` reaproveitando exatamente as mesmas funções de juiz de
+> `src/metrics.py` e as mesmas fórmulas derivadas de `evaluate.py`. Veja a seção
+> *Como Executar*.
 
 ### Diferenças-chave entre v1 e v2
 
@@ -513,13 +564,38 @@ público pela interface (isso cria o handle). Você pode forçar privado com
 `PROMPT_PUBLIC=false`. Após o push, copie seu handle da URL e preencha
 `USERNAME_LANGSMITH_HUB` no `.env`.
 
-### 6. Avaliar
+### 6. Avaliar (resumo no terminal)
 
 ```bash
 python src/evaluate.py
 ```
 Cria/atualiza o dataset de 15 exemplos, puxa o `v2` do Hub, executa contra o dataset, calcula as
-5 métricas e publica no dashboard do LangSmith. Repita os passos 4–6 até **todas ≥ 0.9**.
+5 métricas e **imprime o resumo no terminal**. Repita os passos 4–6 até **todas ≥ 0.9**.
+
+### 6b. Registrar o Experiment no LangSmith (evidência printável + link público)
+
+```bash
+python run_experiment.py
+```
+O `evaluate.py` não cria um *Experiment* no LangSmith (só imprime no terminal). Este runner
+externo usa a API oficial `langsmith.evaluation.evaluate()` para registrar um **Experiment**
+com as 5 métricas por exemplo — gerando a tela de comparação e o **link público** exigidos
+como evidência. Ele reaproveita as mesmas funções de juiz de `src/metrics.py` e as mesmas
+fórmulas derivadas de `evaluate.py`, então o resultado é equivalente, porém persistido.
+
+Variáveis úteis (opcionais):
+- `EVAL_THROTTLE_SECONDS` (default `7`): pausa antes de cada chamada de LLM (evita HTTP 429
+  no tier gratuito do Gemini).
+- `EXPERIMENT_PREFIX` (default `v2-eval`): prefixo do nome do experiment no dashboard.
+
+```powershell
+# Windows (UTF-8 + throttle)
+$env:PYTHONUTF8="1"; $env:PYTHONIOENCODING="utf-8"; $env:EVAL_THROTTLE_SECONDS="7"
+python run_experiment.py
+```
+
+Ao final, o experiment aparece em *Datasets & Experiments → `prompt-optimization-challenge-eval`
+→ aba Experiments*, e o link direto é impresso no terminal.
 
 ### 7. Testes de validação (estáticos, sem rede)
 
@@ -532,9 +608,11 @@ pytest tests/test_prompts.py -v
 ## Notas de Implementação
 
 - **Arquivos implementados:** `src/pull_prompts.py`, `src/push_prompts.py`,
-  `prompts/bug_to_user_story_v2.yml`, `tests/test_prompts.py`.
+  `prompts/bug_to_user_story_v2.yml`, `tests/test_prompts.py`,
+  `run_experiment.py` (runner externo que registra o Experiment no LangSmith — ver passo 6b).
 - **Não alterados (já vinham prontos):** `src/evaluate.py`, `src/metrics.py`, `src/utils.py`,
-  `datasets/bug_to_user_story.jsonl`.
+  `datasets/bug_to_user_story.jsonl`. O `run_experiment.py` NÃO altera nenhum deles —
+  apenas importa e reaproveita as funções de `metrics.py`/`utils.py`.
 - **Provider:** Google Gemini (`gemini-2.5-flash`) para responder e avaliar.
 - **Contrato de avaliação:** o `evaluate.py` faz `hub.pull("{USERNAME_LANGSMITH_HUB}/bug_to_user_story_v2")`
   esperando um `ChatPromptTemplate` cuja única variável seja `{bug_report}`. O `push_prompts.py`

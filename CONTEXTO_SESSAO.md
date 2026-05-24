@@ -4,22 +4,43 @@
 > experimentos já feitos (já gastamos ~R$100 em chamadas de LLM). Leia tudo antes
 > de rodar qualquer avaliação paga.
 
-Última atualização: 2026-05-22 (madrugada). Branch: `main`.
+Última atualização: 2026-05-24. Branch: `main`. **STATUS: ✅ DESAFIO APROVADO.**
 
 ---
 
-## 1. Resumo executivo (onde paramos)
+## 0. ⭐ ESTADO ATUAL (2026-05-24) — APROVADO
+
+**Todas as 5 métricas ≥ 0.9, salvas como Experiment real no LangSmith.**
+
+- Experiment aprovado: `v2-fix-recall-69dd487d` — helpfulness 0.9523, correctness 0.9335,
+  **f1_score 0.9017**, clarity 0.9393, precision 0.9653. Média **0.9385**.
+- Link: https://smith.langchain.com/o/02a073ba-dcec-4290-93c4-7a01c4d4900e/datasets/cd998d48-52b2-42f4-a5a4-2d06891975ae/compare?selectedSessions=0133b8f1-7ceb-402a-9be1-b26ee1a5bc15
+- Prompt v2 público (commit Hub `69992a0b`): https://smith.langchain.com/prompts/bug_to_user_story_v2/69992a0b?organizationId=02a073ba-dcec-4290-93c4-7a01c4d4900e
+
+**DESCOBERTA QUE DESBLOQUEOU O F1 (corrige o §1/§6 antigos abaixo):**
+1. O `evaluate.py` NUNCA registrava Experiment no LangSmith — só imprimia no terminal. Por
+   isso não havia evidência printável. Solução: `run_experiment.py` (runner externo, usa
+   `langsmith.evaluation.evaluate()` oficial, reaproveita `metrics.py`). Ver passo 6b do README.
+2. O F1 baixo NÃO era "só variância". Era **recall**: o v2 omitia seções inteiras que o
+   gabarito tem (`Critérios Técnicos`, `Critérios de Acessibilidade`, `Critérios Adicionais
+   para Admins`, prevenção de concorrência). Precision era ~1.0; o recall caía a ~0.6.
+   Corrigido tornando essas seções OBRIGATÓRIAS por gatilho + regra anti-precision em metas
+   de performance + novo few-shot técnico → F1 0.856 → 0.902.
+
+**Atenção:** margem do F1 é apertada (0.9017); 5 exemplos ainda em F1=0.824 (recall 0.7).
+Para blindar com folga, subir o recall desses 5 (ver análise por exemplo via API).
+
+**Pendência de entrega:** tirar os screenshots (ver `screenshots/README.md`).
+
+---
+
+## 1. Resumo executivo (HISTÓRICO — ver §0 para estado atual)
 
 - **Implementação 100% pronta e funcional.** Todo o código do desafio foi implementado,
   o prompt v2 está publicado e PÚBLICO no LangSmith Hub, e os 6 testes passam.
-- **Bloqueio único restante:** a métrica **F1-Score** fica em **0.84–0.89** na avaliação
-  em lote (`evaluate.py`) e **nunca cruza 0.90** de forma confiável. As **outras 4
-  métricas passam SEMPRE com folga** (Helpfulness ~0.94–0.98, Correctness ~0.89–0.93,
-  Clarity ~0.91–0.99, Precision ~0.95–1.00). **Média geral: 0.90–0.95** conforme o run.
-- **Causa raiz comprovada:** NÃO é qualidade do prompt. É **variância do avaliador
-  (LLM-as-Judge) + variância do responder** na execução em lote. TODOS os 15 exemplos
-  pontuam F1 **0.89–1.0 (maioria 0.95–1.0) quando avaliados ISOLADAMENTE**, mas os mesmos
-  exemplos caem para 0.67–0.82 dentro do lote de 45 chamadas do `evaluate.py`.
+- ~~**Bloqueio único restante:** a métrica **F1-Score**...~~ **RESOLVIDO em 2026-05-24, ver §0.**
+- ~~**Causa raiz comprovada:** ... variância do avaliador.~~ **Diagnóstico revisado: a causa
+  principal era RECALL (seções omitidas), corrigível no prompt — ver §0.**
 
 ---
 
